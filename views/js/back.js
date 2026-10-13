@@ -62,7 +62,7 @@ var seur =
                     },
                     error: function (jqXHR, exception) {
                         $('.loading').removeClass('loading');
-                        $('#error').html(error_response).slideDown();
+                        $('#error').html('Error: ' + jqXHR.responseText).slideDown();
                         $.scrollTo('#error', 1300, {offset: -150});
                     },
                     complete: function () {
@@ -145,8 +145,7 @@ $(document).ready(function () {
     });
 
     $("input[name=SEUR2_SETTINGS_COD]:radio").on('click',function () {
-        var params = '';
-        params = 'ajax=1&configure=seur&';
+        var params = 'ajax=1&configure=seur&';
 
         if($(this).attr('id')=='cashDelivery_on'){
             params+= 'action=activateCashonDelivery';
@@ -171,14 +170,13 @@ $(document).ready(function () {
 
 
     $("#seur_tracking").on('click',function () {
-        var params = '&action=updateShippings';
         $('html, body').css("cursor", "wait");
         $.ajax({
             type: 'POST',
             headers: {"cache-control": "no-cache"},
             async: false,
-            url: seur_ajaxcall_url + params,
-            data: params,
+            url: window.seur_tracking_url,
+            data: { ajax: 1 },
             dataType: "json",
             error: function (data) {
                 $('html, body').css("cursor", "default");
@@ -211,19 +209,11 @@ $(document).ready(function () {
             clearInterval(seur.reloadTimer);
     }, seur.reloadTimerIntervalSeconds * 1000);
 
-    $("#massive_change").on('change',function () {
-       var valor = $("#massive_change").val();
-
-       if(valor == "change_ccc")
-            $(".cambio-masivo-ccc").show();
-       else
-           $(".cambio-masivo-ccc").hide();
-    });
 });
 
 $(document).on('change',"input[name='type_service']", function(){
     var id = $("input[name='type_service']:checked").val();
-   reloadServicesAndProducts(id);
+    reloadServicesAndProducts(id);
 });
 $(document).on('change',"select[name='type_service']", function(){
     var id = $("select[name='type_service']").val();
@@ -236,15 +226,17 @@ $(document).ready(function(){
 })
 
 function reloadServicesAndProducts(id){
-    var currentIndex = 'index.php?controller=AdminSeurCarrier';
-    seur_url_ajax = seur_url_basepath + "/modules/seur/ajax/";
+    $("#divPudoId").hide();
+    if (id == 2) {
+        $("#divPudoId").show();
+    }
 
     $.ajax({
         type: 'POST',
         headers: {"cache-control": "no-cache"},
         async: false,
         dataType: 'json',
-        url: seur_url_ajax+'getServices.php',
+        url: window.seur_getservices_url,
         data : {
             ajax: 1,
             action: "services",
@@ -270,7 +262,7 @@ function reloadServicesAndProducts(id){
         headers: {"cache-control": "no-cache"},
         async: false,
         dataType: 'json',
-        url: seur_url_ajax+'getProducts.php',
+        url: window.seur_getproducts_url,
         data : {
             ajax: 1,
             action: "products",
@@ -305,13 +297,12 @@ $(document).on('click','.new_account_ccc',function() {
 });
 
 $(document).on('change',"select[name='insured']", function() {
-    var url = "/modules/seur/ajax/saveInsured.php";
     if (labeled==="0") {
         $.ajax({
             type: 'POST',
             headers: {"cache-control": "no-cache"},
             async: false,
-            url: url,
+            url: window.seur_saveinsured_url,
             data: {
                 ajax: 1,
                 action: "saveInsured",

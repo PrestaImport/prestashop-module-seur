@@ -38,6 +38,7 @@ class UpdateShipmentsStatus implements CommandHandler
      * @var array
      */
     private $shipments_status;
+    const LOG_FILE = 'updateShipments';
 
     public function __construct()
     {
@@ -70,27 +71,30 @@ class UpdateShipmentsStatus implements CommandHandler
 
     private function processSingleShipment(array $shipment)
     {
-        /* Consultar estado */
+        $shipment_errors = '';
+
         $response = $this->getShipmentStatus($shipment);
-        if (empty($response->data)) {
-            $this->error_messages .= ' # '.$shipment['id_order'].' - no response data';
-            return;
+        if ($response === false || empty($response->data)) {
+            $shipment_errors .= ' # '.$shipment['id_order'].' - no response data';
         }
 
         $shipment_status = $this->parseShipmentStatusResponse($response);
-        if ( false === $shipment_status ) {
-            $this->error_messages .= ' # '.$shipment['id_order'].' - no 4 matches';
-            return;
+        if ($shipment_status === false) {
+            $shipment_errors .= ' # ' . $shipment['id_order'] . ' - no 4 matches';
         }
 
         $expedition_status = SeurOrder::getStatusExpedition($shipment_status['tipo_situ'], (int)$shipment_status['cod_situ']);
-        if (!isset($expedition_status['id_status'])) {
-            //echo "Error al actualizar estado pedido ".$shipment['id_order']."<br/>";
-            $this->error_messages .= ' # '.$shipment['id_order'].' - id_status vacío. tipo_situ: '.$shipment_status['tipo_situ']. ' - cod_situ: '.$shipment_status['cod_situ'] ;
+        if ($expedition_status === false || !isset($expedition_status['id_status'])) {
+            $shipment_errors .= ' # ' . $shipment['id_order'] . ' - id_status vacío. tipo_situ: ' . $shipment_status['tipo_situ'] . ' - cod_situ: ' . $shipment_status['cod_situ'];
+
+        }
+        if ($shipment_errors != '') {
+            $this->error_messages .= $shipment_errors;
+            $this->updateShipmentStatus($shipment, [], [], true);
             return;
         }
 
-        $this->updateShipmentStatus($shipment, $shipment_status, $expedition_status);
+        $this->updateShipmentStatus($shipment, $shipment_status, $expedition_status, false);
     }
 
     private function getShipmentStatus(array $shipment)
@@ -106,7 +110,7 @@ class UpdateShipmentsStatus implements CommandHandler
         return $response;
     }
 
-    private function parseShipmentStatusResponse(\stdClass $state)
+    private function parseShipmentStatusResponse($state)
     {
         $expedicion = $state->data[0];
         $cod_situacion = $expedicion->eventCode;
@@ -126,9 +130,15 @@ class UpdateShipmentsStatus implements CommandHandler
     private function updateShipmentStatus(
         array $shipment,
         array $shipment_status,
-        array $expedition_status
+        array $expedition_status,
+        bool $failed
     ) {
         try {
+            if ($failed) {
+                SeurOrder::updateQueryDateSeur($shipment['id_order'], true);
+                return;
+            }
+            $this->initContext();
             $this->performUpdateShipmentStatus($shipment, $shipment_status, $expedition_status);
             $this->trackOperation($shipment, $shipment_status, $expedition_status);
         } catch (Exception $e) {
@@ -161,5 +171,20 @@ class UpdateShipmentsStatus implements CommandHandler
             'status' => $expedition_status['id_status'],
             'desc' => $shipment_status['expedicion']->description
         ];
+    }
+
+    private function initContext()
+    {
+        require_once _PS_ROOT_DIR_ . '/config/config.inc.php';
+        require_once _PS_ROOT_DIR_ . '/init.php';
+
+        $context = \Context::getContext();
+
+        if ($context->employee === null) {
+            //get first admin employee
+            $result = \Db::getInstance()->executeS('SELECT id_employee FROM '._DB_PREFIX_.'employee WHERE active = 1 AND id_profile = 1 ORDER BY id_employee ASC LIMIT 1');
+            $employeeId = $result && isset($result[0]) ? $result[0]['id_employee'] : 1;
+            $context->employee = New \Employee($employeeId);
+        }
     }
 }

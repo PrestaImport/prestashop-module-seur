@@ -64,21 +64,6 @@ class AdminSeurCarrierController extends ModuleAdminController
             $list_cccs[$ccc['name']] = $ccc['name'];
         }
 
-//        $this->_select = '
-//		a.id_currency,
-//		a.id_order AS id_pdf,
-//		login AS `login`,
-//		osl.`name` AS `osname`,
-//		CONCAT(login, " (",address.`firstname`," ",address.`lastname`,")") AS `customer`,
-//		os.`color`,
-//		IF((SELECT so.id_order FROM `'._DB_PREFIX_.'orders` so WHERE so.id_customer = a.id_customer AND so.id_order < a.id_order LIMIT 1) > 0, 0, 1) as new,
-//		country_lang.name as cname,
-//		IF(a.valid, 1, 0) badge_success,
-//		a.etiquetado,
-//		a.servido,
-//        ca.name as carrier_name,
-//        a.observaciones_etiqueta as msg';
-
         $this->_select = 'id_seur_carrier as id_seur2_carrier, ca.id_carrier, ca.name, st.name';
 
         $this->_defaultOrderBy = 'id_seur_carrier';
@@ -175,8 +160,8 @@ class AdminSeurCarrierController extends ModuleAdminController
                 'url_module' => $this->context->link->getAdminLink('AdminModules', true) . "&configure=seur&module_name=seur",
                 'url_controller' => $this->context->link->getAdminLink('AdminSeurShipping', true),
                 'img_path' => $this->module->getPath() . 'views/img/',
-                'module_path' => 'index.php?controller=AdminModules&configure=' . $this->module->name . '&token=' . Tools::getAdminToken("AdminModules" . (int)(Tab::getIdFromClassName("AdminModules")) . (int)$this->context->cookie->id_employee),
-                'seur_url_basepath' => $this->context->link->getBaseLink($this->context->shop->id),
+                'module_path' => 'index.php?controller=AdminModules&configure=' . $this->module->name . '&token=' . Tools::getAdminToken("AdminModules" . (int)(Seur::findTabIdByClassName("AdminModules")) . (int)$this->context->cookie->id_employee),
+                'seur_url_basepath' => seurLib::getBaseLink(),
             ));
 
         $smarty = $this->context->smarty;
@@ -195,8 +180,8 @@ class AdminSeurCarrierController extends ModuleAdminController
                 'url_list' => $this->context->link->getAdminLink('AdminSeurCarrier', true),
                 'url_carrier' => $this->context->link->getAdminLink('AdminCarriers', true),
                 'img_path' => $this->module->path . 'views/img/',
-                'module_path' => 'index.php?controller=AdminModules&configure=' . $this->module->name . '&token=' . Tools::getAdminToken("AdminModules" . (int)(Tab::getIdFromClassName("AdminModules")) . (int)$this->context->cookie->id_employee),
-                'seur_url_basepath' => $this->context->link->getBaseLink($this->context->shop->id),
+                'module_path' => 'index.php?controller=AdminModules&configure=' . $this->module->name . '&token=' . Tools::getAdminToken("AdminModules" . (int)(Seur::findTabIdByClassName("AdminModules")) . (int)$this->context->cookie->id_employee),
+                'seur_url_basepath' => seurLib::getBaseLink(),
             ));
 
 
@@ -242,36 +227,6 @@ class AdminSeurCarrierController extends ModuleAdminController
             'free_shipping_price' => $free_shipping_price,
             'active' => $active,
         ));
-
-
-        /*
-        $sql ="
-            UPDATE `"._DB_PREFIX_."lgpampling_product` pp
-            LEFT JOIN (SELECT o.id_product, @curRow := @curRow + 1 AS orden_final
-                        FROM `ps_lgpampling_product` o
-                    JOIN (SELECT @curRow := 0) r
-                    LEFT JOIN `"._DB_PREFIX_."product` p ON p.id_product = o.id_product
-                    WHERE p.id_product = o.id_product AND active=1
-                    ORDER BY orden) o ON pp.id_product = o.id_product
-            set
-                pp.orden = o.orden_final";
-
-        Db::getInstance(_PS_USE_SQL_SLAVE_)->execute($sql);
-
-
-        $sql = "SELECT p.id_product, id_tipo, l.name, l.link_rewrite, pp.orden, i.id_image FROM `"._DB_PREFIX_."product` p
-                LEFT JOIN `"._DB_PREFIX_."product_lang` l ON (p.`id_product` = l.`id_product` AND l.id_lang=".(int)$this->context->language->id.")
-                LEFT JOIN `"._DB_PREFIX_."product_shop` s ON (p.`id_product` = s.`id_product`)
-                LEFT JOIN `"._DB_PREFIX_."lgpampling_product` pp ON (p.`id_product` = pp.`id_product`)
-                LEFT JOIN `"._DB_PREFIX_."image` i ON (p.`id_product` = i.`id_product` AND i.cover=1)
-                WHERE s.active=1 AND s.visibility != 'none'
-                ORDER BY pp.orden DESC";
-
-        $products =  Db::getInstance(_PS_USE_SQL_SLAVE_)->executeS($sql);
-
-        $this->context->smarty->assign('products', $products);
-*/
-//        parent::initContent();
 
         return $this->context->smarty->fetch(dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . 'views' . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR . 'admin' . DIRECTORY_SEPARATOR . 'carrier.tpl');
 
