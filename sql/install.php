@@ -129,15 +129,15 @@ $sql[] = "INSERT INTO `"._DB_PREFIX_."seur2_products` (`id_seur_product`, `id_se
 (104, 3, 'CROSSBORDER')";
 
 $sql[] = 'CREATE TABLE IF NOT EXISTS `'._DB_PREFIX_.'seur2_order_pos` (
+`id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
 `id_cart` int(10) NOT NULL,
 `id_seur_pos` varchar(50) NOT NULL,
-`company` varchar(50) NOT NULL ,
-`address` varchar(100) NOT NULL ,
-`city` varchar(15) NOT NULL ,
-`postal_code` varchar(12) NOT NULL ,
-`timetable` varchar(50) NOT NULL,
-`phone` varchar(20) NOT NULL,
-PRIMARY KEY (`id_cart`,`id_seur_pos`)
+`company` varchar(50) NULL ,
+`address` varchar(100) NULL ,
+`city` varchar(15) NULL ,
+`postal_code` varchar(12) NULL ,
+`timetable` varchar(50) NULL,
+`phone` varchar(20) NULL
 ) ENGINE='._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8';
 
 $sql[] = 'CREATE TABLE IF NOT EXISTS `'._DB_PREFIX_.'seur2_order` (
@@ -673,42 +673,33 @@ $sql[] = "INSERT INTO `"._DB_PREFIX_."seur2_european_countries` (`id`, `iso_code
 (26, 'SI', 'Eslovenia'),
 (27, 'SK', 'Eslovaquia')";
 
-$query = "SELECT count(*) as existe FROM INFORMATION_SCHEMA.COLUMNS 
-             WHERE table_name = '"._DB_PREFIX_."seur2_order'
-             AND column_name = 'ecbs'";
-$existe = Db::getInstance(_PS_USE_SQL_SLAVE_)->getValue($query);
-if (!$existe) {
-    $sql[] = "ALTER TABLE `"._DB_PREFIX_."seur2_order` ADD COLUMN ecbs varchar(500) NULL DEFAULT '';";
-}
 
-$query = "SELECT count(*) as existe FROM INFORMATION_SCHEMA.COLUMNS 
-             WHERE table_name = '"._DB_PREFIX_."seur2_order'
-             AND column_name = 'parcelNumbers'";
-$existe = Db::getInstance(_PS_USE_SQL_SLAVE_)->getValue($query);
-if (!$existe) {
-    $sql[] = "ALTER TABLE `"._DB_PREFIX_."seur2_order` ADD COLUMN parcelNumbers varchar(500) NULL DEFAULT '';";
-}
-
-$query = "SELECT count(*) as existe FROM INFORMATION_SCHEMA.COLUMNS 
-             WHERE table_name = '"._DB_PREFIX_."seur2_order'
-             AND column_name = 'expeditionCode'";
-$existe = Db::getInstance(_PS_USE_SQL_SLAVE_)->getValue($query);
-if (!$existe) {
-    $sql[] = "ALTER TABLE `"._DB_PREFIX_."seur2_order` ADD COLUMN expeditionCode varchar(255) NULL DEFAULT '';";
-}
-
-$query = "SELECT count(*) as existe FROM INFORMATION_SCHEMA.COLUMNS 
-             WHERE table_name = '"._DB_PREFIX_."seur2_order'
-             AND column_name = 'label_files'";
-$existe = Db::getInstance(_PS_USE_SQL_SLAVE_)->getValue($query);
-if (!$existe) {
-    $sql[] = "ALTER TABLE `"._DB_PREFIX_."seur2_order` ADD COLUMN label_files varchar(1000) NULL DEFAULT '';";
-}
+$sql[] = "ALTER TABLE `"._DB_PREFIX_."seur2_order` ADD COLUMN ecbs varchar(500) NULL DEFAULT '';";
+$sql[] = "ALTER TABLE `"._DB_PREFIX_."seur2_order` ADD COLUMN parcelNumbers varchar(500) NULL DEFAULT '';";
+$sql[] = "ALTER TABLE `"._DB_PREFIX_."seur2_order` ADD COLUMN expeditionCode varchar(255) NULL DEFAULT '';";
+$sql[] = "ALTER TABLE `"._DB_PREFIX_."seur2_order` ADD COLUMN label_files varchar(1000) NULL DEFAULT '';";
 
 $sql[] = "INSERT INTO `"._DB_PREFIX_."seur2_services` (id_seur_services, id_seur_services_type, name) 
             VALUES (77, 2, 'CLASSIC')";
 
 $sql[] = "ALTER TABLE `"._DB_PREFIX_."seur2_order` ADD COLUMN insured tinyint(1) NULL DEFAULT 0;";
+
+$sql[] = "INSERT INTO `"._DB_PREFIX_."seur2_services` (id_seur_services, id_seur_services_type, name) 
+            VALUES (1, 1, 'S24')";
+
+$sql[] = "ALTER TABLE `"._DB_PREFIX_."seur2_query` ADD COLUMN failed_attempts INT DEFAULT 0;";
+
+$sql[] = "CREATE TABLE IF NOT EXISTS `"._DB_PREFIX_."seur2_cron_tasks` (
+  `id_task` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(191) NOT NULL,
+  `handler` VARCHAR(191) NOT NULL,
+  `interval_seconds` INT UNSIGNED NOT NULL DEFAULT 3600,
+  `next_run_at` INT UNSIGNED NOT NULL,
+  `last_run_at` INT UNSIGNED NULL,
+  `active` TINYINT(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id_task`),
+  UNIQUE KEY `uniq_name` (`name`)
+) ENGINE="._MYSQL_ENGINE_." DEFAULT CHARSET=utf8";
 
 foreach ($sql as $query) {
     if (Db::getInstance()->execute($query) == false) {

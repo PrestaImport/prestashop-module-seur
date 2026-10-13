@@ -10,6 +10,8 @@
 require_once(_PS_MODULE_DIR_ . 'seur' . DIRECTORY_SEPARATOR . 'classes' . DIRECTORY_SEPARATOR . 'PDFMerger.php');
 require_once(_PS_MODULE_DIR_ . 'seur' . DIRECTORY_SEPARATOR . 'classes' . DIRECTORY_SEPARATOR . 'SeurOrder.php');
 if (!class_exists('SeurCashOnDelivery')) include_once(_PS_MODULE_DIR_.'seurcashondelivery/seurcashondelivery.php');
+if (!class_exists('SeurOrderPos')) include_once(_PS_MODULE_DIR_.'seur/classes/SeurOrderPos.php');
+if (!class_exists('SeurCarrier')) include_once(_PS_MODULE_DIR_.'seur/classes/SeurCarrier.php');
 use PDFMerger\PDFMerger;
 
 class AdminSeurShippingController extends ModuleAdminController
@@ -17,11 +19,6 @@ class AdminSeurShippingController extends ModuleAdminController
     public function __construct()
     {
         $module = Module::getInstanceByName('seur');
-
-        if (Tools::version_compare(_PS_VERSION_, '1.7', '<')) {
-            $this->addJQuery();
-            $this->addJS($module->getPath() . 'views/js/seurController.js');
-        }
 
         $this->bootstrap = true;
         $this->name = 'AdminSeurShipping';
@@ -41,18 +38,6 @@ class AdminSeurShippingController extends ModuleAdminController
         $this->page_header_toolbar_btn = array();
 
         $this->bulk_actions = array();
-
-        /*
-        'print_labels' => array(
-                'text' => $this->l('Print labels selected shiping'),
-                'icon' => 'icon-barcode',
-            ),
-        'manifest' => array(
-                'text' => $this->l('Generate manifest selected shiping'),
-                'icon' => 'icon-file-o',
-            )
-        );
-        */
 
         $this->fields_list = array(
             'id_seur_order' => array(
@@ -174,7 +159,7 @@ class AdminSeurShippingController extends ModuleAdminController
             ),
         );
 
-        $this->context->smarty->assign('controlador', 'AdminShippingReturns');
+        $this->context->smarty->assign('controlador', 'AdminSeurShipping');
 
         $this->_join .= '
             LEFT JOIN `' . _DB_PREFIX_ . 'orders` o ON a.id_order = o.id_order
@@ -207,23 +192,26 @@ class AdminSeurShippingController extends ModuleAdminController
         }
 
         if ((int)Tools::getValue('AddNewOrder')){
-            $this->addOrder((int)Tools::getValue('AddNewOrder'),(int)Tools::getValue('seur_carrier'));
+            if (SeurOrder::addOrder((int)Tools::getValue('AddNewOrder'), (int)Tools::getValue('seur_carrier'), (bool)Configuration::get("SEUR2_RECALCULATE_SHIPMENT_COST" )??0)) {
+                SeurLib::showMessageOK($this, 'Se ha cambiado el pedido para envío con Seur');
+            } else {
+                SeurLib::showMessageError($this, 'No se ha podido cambiar el pedido para envío con Seur');
+            }
             $url = Context::getContext()->link->getAdminLink('AdminOrders');
             Tools::redirectAdmin($url . '&id_order='.(int)Tools::getValue('AddNewOrder').'&vieworder');
             die();
         }
 
         if (Tools::getValue('action') == "print_label") {
-            $this->printLabel((int)Tools::getValue('id_order'));
+            $this->printLabel((int)Tools::getValue('id_seur_order'));
             die();
         }
 
         if (Tools::getValue('action') == "print_labels") {
-            $this->printLabels(Tools::getValue('id_orders'));
-            die();
+            $this->printLabels(Tools::getValue('id_seur_orders'));
         }
 
-        if (Tools::getValue('action') == "edit_order") {
+        if (Tools::getValue('action') == "edit_order" && Tools::getvalue('num_bultos')) {
             $id_order = Tools::getValue('id_order');
             $this->editOrder($id_order);
             $url = Context::getContext()->link->getAdminLink(
@@ -236,27 +224,23 @@ class AdminSeurShippingController extends ModuleAdminController
         }
 
         if (Tools::getValue('massive_action') != '') {
-            $orders = Tools::getValue('shippingBox');
-            if(version_compare(_PS_VERSION_, '1.6', '<')) {
-                $orders = Tools::getValue('seur2_orderBox');
-            }
+            $id_seur_orders = Tools::getValue('shippingBox');
             if (Tools::getValue('massive_action') == "print_labels") {
-                $print_labels = $this->printLabels($orders);
+                $this->printLabels($id_seur_orders);
+                die();
             }
             if (Tools::getValue('massive_action') == "manifest") {
-                $manifest = $this->manifest($orders);
+                $this->manifest($id_seur_orders);
+                die();
             }
             if (Tools::getValue('massive_action') == "change_ccc") {
                 $ccc_massive_change = Tools::getValue('massive_change_ccc');
-                $this->changeCCC($orders, $ccc_massive_change);
+                $this->changeCCC($id_seur_orders, $ccc_massive_change);
             }
         }
 
         if (Tools::getValue('action') == "send_dd") {
             $this->send_dd((int)Tools::getValue('id_seur_order'));
-            //$url = Context::getContext()->link->getAdminLink('AdminOrders');  //comentado porque no muestra notificaciones
-            //Tools::redirectAdmin($url . '&id_order='.(int)Tools::getValue('id_order').'&vieworder');
-            //die();
         }
 
         $this->context->smarty->assign(
@@ -266,62 +250,42 @@ class AdminSeurShippingController extends ModuleAdminController
                 'url_controller_collecting' => $this->context->link->getAdminLink('AdminSeurCollecting', true),
                 'url_controller_tracking' => $this->context->link->getAdminLink('AdminSeurTracking', true),
                 'url_controller_returns' => $this->context->link->getAdminLink('AdminSeurReturns', true),
+                'url_controller_bulk_assign_carrier' => $this->context->link->getAdminLink('AdminSeurBulkAssignCarrier', true),
+                'url_controller_pickup_locations' => $this->context->link->getAdminLink('AdminSeurPickupLocations', true),
                 'img_path' => $this->module->getPath() . 'views/img/',
-                'module_path' => 'index.php?controller=AdminModules&configure=' . $this->module->name . '&token=' . Tools::getAdminToken("AdminModules" . (int)(Tab::getIdFromClassName("AdminModules")) . (int)$this->context->cookie->id_employee),
+                'module_path' => 'index.php?controller=AdminModules&configure=' . $this->module->name . '&token=' . Tools::getAdminToken("AdminModules" . (int)(Seur::findTabIdByClassName("AdminModules")) . (int)$this->context->cookie->id_employee),
+                'seur_url_basepath' => seurLib::getBaseLink(),
+                'bulk_assign_enabled' => Configuration::get('SEUR2_BULK_ASSIGN_CARRIER'),
+                'tabSelect' => 'shipping',
             ));
 
-        $selecttab = "shipping";
-        $this->context->smarty->assign(
-            array('tabSelect' => $selecttab)
-        );
-
-        $smarty = $this->context->smarty;
         $html = "";
 
-        if(isset($print_labels) && count($print_labels))
-        {
-            $this->context->smarty->assign(
-                array('print_labels' => $print_labels)
-            );
-
-            if(Configuration::get('SEUR2_SETTINGS_PRINT_TYPE')==2) {
-                $html .= $smarty->fetch(_PS_MODULE_DIR_ . 'seur/views/templates/admin/print_labels_txt.tpl');
-            } else {
-                $html .= $smarty->fetch(_PS_MODULE_DIR_ . 'seur/views/templates/admin/print_labels.tpl');
-            }
-        }
-
-        if(isset($manifest))
-        {
-            $this->context->smarty->assign(
-                array('manifest' => $manifest)
-            );
-
-            $html .= $smarty->fetch(_PS_MODULE_DIR_ . 'seur/views/templates/admin/manifest.tpl');;
-        }
-
 		$this->context->smarty->assign('list_ccc', SeurCCC::getListCCC());
-        $html .= $smarty->fetch(_PS_MODULE_DIR_ . 'seur/views/templates/admin/header.tpl');;
-        $html .= $smarty->fetch(_PS_MODULE_DIR_ . 'seur/views/templates/admin/tabs.tpl');;
+        $html .= $this->context->smarty->fetch(_PS_MODULE_DIR_ . 'seur/views/templates/admin/header.tpl');;
+        $html .= $this->context->smarty->fetch(_PS_MODULE_DIR_ . 'seur/views/templates/admin/tabs.tpl');;
         $html .= parent::renderList();
-        $html .= $smarty->fetch(_PS_MODULE_DIR_ . 'seur/views/templates/admin/massives.tpl');;
+        $html .= $this->context->smarty->fetch(_PS_MODULE_DIR_ . 'seur/views/templates/admin/massives.tpl');;
 
         return $html;
     }
 
-    public function printLabels($id_orders)
+    public function printLabels($id_seur_orders)
     {
         $print_labels = [];
 
-        if(!isset($id_orders) || !is_array($id_orders))
-            $id_orders = [];
+        if (isset($id_seur_orders) && !is_array($id_seur_orders)) {
+            $id_seur_orders = explode(',', $id_seur_orders);
+        }
 
-        foreach ($id_orders as $id_seur_order) {
+        if(!isset($id_seur_orders) || !is_array($id_seur_orders))
+            $id_seur_orders = [];
+
+        foreach ($id_seur_orders as $id_seur_order) {
             $print_labels = array_merge($print_labels, $this->getAllLabels($id_seur_order));
         }
 
         $this->printAllLabels($print_labels, true);
-        return $print_labels;
     }
 
     public function createLabel($id_seur_order)
@@ -330,16 +294,11 @@ class AdminSeurShippingController extends ModuleAdminController
         $id_order = $seur_order->id_order;
         $order = new Order((int)$id_order);
 
-        /*if (SeurLib::getLabelFileName($order, null)) {
-            return (int)$id_seur_order;
-        }*/
         $seur_order->labeled = false;
 
-        $versionSpecialClass = '';
         if (!file_exists(_PS_MODULE_DIR_ . 'seur/img/logonew_32.png') && file_exists(_PS_MODULE_DIR_ . 'seur/img/logonew.png'))
             ImageManager::resize(_PS_MODULE_DIR_ . 'seur/img/logonew.png', _PS_MODULE_DIR_ . 'seur/img/logonew_32.png', 32, 32, 'png');
-        if (version_compare(_PS_VERSION_, '1.5', '<'))
-            $versionSpecialClass = 'ver14';
+
         SeurLib::displayWarningSeur();
 
         if ($this->module->isConfigured())
@@ -356,7 +315,7 @@ class AdminSeurShippingController extends ModuleAdminController
 
             if (!Validate::isLoadedObject($order))
                 return false;
-            $delivery_price = $order_weigth = 0;
+            $order_weigth = 0;
             $products = $order->getProductsDetail();
 
             foreach ($products as $product) {
@@ -395,23 +354,7 @@ class AdminSeurShippingController extends ModuleAdminController
 
                 $id_seur_ccc = $seur_order->id_seur_ccc;
                 $merchant_data = SeurLib::getMerchantData((int)$id_seur_ccc);
-
                 $iso_merchant = $merchant_data['country'];
-                $rate_data = array(
-                    'town' => $seur_order->city,
-                    'peso' => (float)$order_weigth,
-                    'post_code' => $post_code,
-                    'bultos' => $order_data['numero_bultos'],
-                    'ccc' => $merchant_data['ccc'],
-                    'franchise' => $merchant_data['franchise'],
-                    'iso' => $newcountry->iso_code,
-                    'iso_merchant' => $iso_merchant,
-                    'id_employee' => $cookie->id_employee,
-                    'token' => Tools::getAdminTokenLite('AdminOrders'),
-                    'back' => $back,
-                    'product' => $seur_order->product,
-                    'service' => $seur_order->service
-                );
 
                 $order_messages_str = '';
                 $info_adicional_str = $seur_order->other;
@@ -456,15 +399,19 @@ class AdminSeurShippingController extends ModuleAdminController
                     'back' => $back
                 );
 
-                if (strcmp($order->module, 'seurcashondelivery') == 0) {
-                    $rate_data['reembolso'] = (float)$order->total_paid;
+                $label_data['clave_reembolso'] = "";
+                $label_data['valor_reembolso'] = "0";
+
+                if (Seurlib::AddCOD($order)) {
                     $label_data['reembolso'] = (float)$order->total_paid;
                     $label_data['clave_reembolso'] = "F";
                     $label_data['valor_reembolso'] = (float)$order->total_paid;
-                }
-                else{
-                    $label_data['clave_reembolso'] = "";
-                    $label_data['valor_reembolso'] = "0";
+
+                    if (SeurLib::AddAllSeurCODPayments()) {
+                        $total_seur_cod_paid = SeurLib::getAllSeurCODPayments($order->reference);
+                        $label_data['reembolso'] = (float)$total_seur_cod_paid;
+                        $label_data['valor_reembolso'] = (float)$total_seur_cod_paid;
+                    }
                 }
 
                 /* COMPROBAMOS SI ES UN TRANSPORTISTA DE RECOGIDA EN PUNTO DE VENTA Y REESCRIBIMOS*/
@@ -480,12 +427,12 @@ class AdminSeurShippingController extends ModuleAdminController
                         'total_bultos' => $label_data['total_bultos'],
                         'total_kilos' => (float)$label_data['total_kilos'],
                         'direccion_consignatario' => $direccion,
-                        'consignee_town' => $datospos['city'],
-                        'codPostal_consignatario' => $datospos['postal_code'],
+                        'consignee_town' => $datospos['city'] != '' ? $datospos['city'] : $label_data['consignee_town'],
+                        'codPostal_consignatario' => $datospos['postal_code'] != '' ? $datospos['postal_code'] : $label_data['codPostal_consignatario'],
                         'telefono_consignatario' => SeurLib::cleanPhone(!empty($seur_order->phone) ? $seur_order->phone : $seur_order->phone_mobile),
                         'movil' => SeurLib::cleanPhone(!empty($seur_order->phone_mobile) ? $seur_order->phone_mobile : $seur_order->phone),
                         'name' => $name,
-                        'companyia' => $datospos['company'],
+                        'companyia' => $datospos['company'] != '' ? $datospos['company'] : $label_data['companyia'],
                         'email_consignatario' => Validate::isLoadedObject($customer) ? $customer->email : '',
                         'dni' => $seur_order->dni,
                         'info_adicional' => $info_adicional_str,
@@ -494,7 +441,6 @@ class AdminSeurShippingController extends ModuleAdminController
                         'cod_centro' => $datospos['id_seur_pos'],
                         'iso_merchant' => $iso_merchant
                     );
-                    $rate_data['cod_centro'] = $datospos['id_seur_pos'];
                 }
 
 				if ($order->hasInvoice()){
@@ -503,79 +449,13 @@ class AdminSeurShippingController extends ModuleAdminController
                         SeurLib::invoiceTariff((int)$seur_order->id_seur_order);
                     }
                 }
-                $is_international = SeurLib::isInternationalShipping($iso_country);
-                $is_geolabel = SeurLib::isGeoLabel($id_seur_ccc);
-                $label_file = SeurLabel::createLabels((int)$order->id, $label_data, $merchant_data, $is_geolabel, $is_international);
+                $label_file = SeurLabel::createLabels((int)$order->id, $label_data, $merchant_data);
 
                 if ($label_file === false) {
                     SeurLib::showMessageError($this, 'Could not set printed value for this order '. $order->reference);
                     return false;
                 }
 
-                $pickup = SeurPickup::getLastPickup($id_seur_ccc);
-                if (!empty($pickup)) {
-                    $pickup_date = explode(' ', $pickup['date']);
-                    $pickup_date = $pickup_date[0];
-                }
-                $pickup_s = 0;
-                if ($pickup && strtotime(date('Y-m-d')) >= strtotime($pickup_date))
-                    $pickup_s = 1;
-
-                $address_error = 0;
-
-                /* Consultar estado */
-                $state = SeurExpedition::getExpeditions(array(
-                    'reference' => SeurLib::getOrderReference($order),
-                    'idNumber' => Configuration::get('SEUR2_MERCHANT_NIF_DNI'),
-                    'id_seur_ccc' => $id_seur_ccc
-                ));
-                $is_empty_state = false;
-                $xml_s = false;
-                if (empty($state->out))
-                    $is_empty_state = true;
-                else {
-                    $string_xml = htmlspecialchars_decode($state->out);
-                    $string_xml = str_replace('&', '&amp; ', $string_xml);
-                    $xml_s = simplexml_load_string($string_xml);
-
-                    if (!$xml_s->EXPEDICION)
-                        $is_empty_state = true;
-                }
-
-				$rate = 0;
-                $rate_data_ajax = json_encode($rate_data);
-                $path = '../modules/seur/js/';
-                $file = (Configuration::get('PS_SSL_ENABLED') ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . __PS_BASE_URI__ . 'modules/seur/files/deliveries_labels/' . $label_file;
-                $filePath = _PS_MODULE_DIR_ . 'seur/files/deliveries_labels/' . $label_file;
-                $label_data['file'] = $file;
-                $this->context->smarty->assign(array(
-                    'path' => $this->module->path,
-                    'request_uri' => $_SERVER['REQUEST_URI'],
-                    'module_instance' => $this,
-                    'address_error' => $address_error,
-                    'address_error_message' => $this->l('Addressess error, please check the customer address.'),
-                    'pickup_s' => $pickup_s,
-                    'pickup' => $pickup,
-                    'isEmptyState' => $is_empty_state,
-                    'xml' => $xml_s,
-                    'order_data' => $order_data,
-                    'iso_country' => $iso_country,
-                    'order_weigth' => $order_weigth,
-                    'delivery_price' => $delivery_price,
-                    'delivery_rate' => $rate,
-                    'delivery_price_tax_excl' => ($delivery_price - $rate),
-                    'rate_data_ajax' => $rate_data_ajax,
-                    'js_path' => $path,
-                    'token' => $token,
-                    'order' => $order,
-                    'label_data' => $label_data,
-                    'fileExists' => file_exists($filePath),
-                    'file' => $file,
-                    'datospos' => $datospos,
-                    'versionSpecialClass' => $versionSpecialClass,
-                    'configured' => (int)Configuration::get('SEUR_Configured'),
-                    'printed' => (bool)(SeurLib::isPrinted((int)$order->id))
-                ));
                 SeurLib::showMessageOK($this, 'Label '.$label_file.' generated');
                 return $seur_order->id_seur_order;
             }
@@ -588,22 +468,22 @@ class AdminSeurShippingController extends ModuleAdminController
         return false;
 	}
 
-    public function changeCCC($orders, $ccc_massive_change)
+    public function changeCCC($id_seur_orders, $ccc_massive_change)
     {
-        foreach($orders as $id_order)
+        foreach($id_seur_orders as $id_seur_order)
         {
-            $seurOrder = new SeurOrder((int)$id_order);
+            $seurOrder = new SeurOrder((int)$id_seur_order);
             $seurOrder->id_seur_ccc = $ccc_massive_change;
             $seurOrder->save();
         }
     }
 
-    public function manifest($id_orders)
+    public function manifest($id_seur_orders)
     {
-        if(!isset($id_orders) || !is_array($id_orders))
-            $id_orders = array();
+        if(!isset($id_seur_orders) || !is_array($id_seur_orders))
+            $id_seur_orders = array();
 
-        return $this->generateManifest($id_orders);
+        $this->generateManifest($id_seur_orders);
     }
 
     private function editOrder($id_order)
@@ -626,10 +506,19 @@ class AdminSeurShippingController extends ModuleAdminController
         $product    = (int)Tools::getvalue('product');
         $service    = (int)Tools::getvalue('service');
         $insured    = (int)Tools::getvalue('insured');
+        $pudoId     = Tools::getvalue('pudoId');
+
+        $db = Db::getInstance();
+        $link = $db->getLink();
+
+        if ($link instanceof \PDO) {
+            $link->beginTransaction();
+        } elseif ($link instanceof \mysqli) {
+            $link->begin_transaction();
+        }
 
         $seur_order = SeurOrder::getByOrder($id_order);
-        $seur_order->numero_bultos  = $num_bultos;
-        $seur_order->peso_bultos    = $peso;
+        $seur_order_old = clone $seur_order;
         $seur_order->firstname      = pSQL($firstname);
         $seur_order->lastname       = pSQL($lastname);
         $seur_order->phone          = pSQL($phone);
@@ -647,7 +536,95 @@ class AdminSeurShippingController extends ModuleAdminController
         $seur_order->service        = $service;
         $seur_order->insured        = $insured;
 
-        $seur_order->save();
+        $order = new Order((int)$id_order);
+        if (!$seur_order->expeditionCode) { // only save changes in database, not send shipment info cause not created yet
+
+            // check if seur carrier has changed
+            $id_seur_carrier_old = $seur_order->id_seur_carrier;
+            $seur_carrier = SeurCarrier::getByProductServiceCCC($product, $service, $id_seur_ccc);
+            $id_seur_carrier_new = $seur_carrier['id_seur_carrier'];
+            if ($id_seur_carrier_old != $id_seur_carrier_new) {
+                $seur_order->id_seur_carrier = $id_seur_carrier_new;
+
+                // get carrier by reference from seur carrier
+                $carrier = Carrier::getCarrierByReference(SeurCarrier::getCarrierReferenceById($id_seur_carrier_new));
+                // update order_carrier
+                $order_carrier = SeurLib::getOrderCarrierByOrderId((int)$order->id);
+                $order_carrier->id_carrier = $carrier->id;
+                $order_carrier->update();
+                // update order
+                $order->id_carrier = $carrier->id;
+                $order->update();
+            }
+
+            // save pickup point if exists
+            if (!empty($pudoId)) {
+                $cart = new Cart((int)$order->id_cart);
+                $seurOrderPos = SeurOrderPos::getByCartId($cart->id);
+                $seurOrderPos->id_cart = $cart->id;
+                $seurOrderPos->id_seur_pos = $pudoId;
+                if (!$seurOrderPos->save()) {
+                    if ($link->inTransaction()) {
+                        $link->rollback();
+                    }
+                    SeurLib::showMessageError($this, 'No se ha podido guardar el punto pickup.');
+                    return false;
+                }
+            }
+
+            // save seur_order
+            $seur_order->numero_bultos  = $num_bultos;
+            $seur_order->peso_bultos    = $peso;
+            $seur_order->save();
+
+            if ($link->inTransaction()) {
+                $link->commit();
+            }
+            SeurLib::showMessageOK($this, 'Se han modificado los datos del pedido correctamente.');
+            return true;
+        }
+
+        if (SeurLib::ShipmentDataUpdated($seur_order_old, $seur_order)) {
+            if (SeurLabel::updateShipments($seur_order)) {
+                // Crear dirección de envío con estos datos y asignarla al pedido
+                SeurLib::updateOrderAddress($seur_order);
+            } else {
+                if ($link->inTransaction()) {
+                    $link->rollback();
+                }
+                SeurLib::showMessageError($this, 'No se ha podido actualizar el envío en SEUR.');
+                return false;
+            }
+        }
+
+        $packages_old = $seur_order_old->numero_bultos;
+        $packages = $num_bultos;
+        $peso_packages = $peso;
+
+        if (SeurLib::PackagesDataUpdated($packages_old, $packages) && $seur_order) {
+            // Comprobar si el número de bultos ha aumentado antes de actualizar el envío
+            if ($packages > $packages_old) {
+                $response = SeurLabel::addParcelsToShipment($packages_old, $packages, $peso_packages, $seur_order->expeditionCode);
+
+                // Si la respuesta es válida, actualizar seur_order con los nuevos datos
+                if ($response) {
+                    $seur_order->numero_bultos = $packages;
+                    $seur_order->peso_bultos = $peso_packages;
+                    SeurLib::updateSeurOrderWithParcels($seur_order, $response);
+                    if ($link->inTransaction()) {
+                        $link->commit();
+                    }
+                    SeurLib::showMessageOK($this, 'Se han modificado los datos del pedido y el envío correctamente.');
+                    return true;
+                } else {
+                    if ($link->inTransaction()) {
+                        $link->rollback();
+                    }
+                    SeurLib::showMessageError($this, 'No se ha podido añadir los bultos adicionales en SEUR.');
+                    return false;
+                }
+            }
+        }
     }
 
     private function addOrder($id_order, $id_seur_carrier)
@@ -726,10 +703,10 @@ class AdminSeurShippingController extends ModuleAdminController
             $seur_order->product = $seur_carrier->product;
             $seur_order->total_paid = $order->total_paid_real;
 
-            if (SeurLib::isCODPayment($order) && $order->module != 'seurcashondelivery') {
+            if (SeurLib::isCODPayment($order) && $order->module != SeurLib::CODPaymentModule) {
                 //cambiar el método COD seleccionado al de seurcashondelivery
-                $order->payment = 'SEUR Contra Reembolso';
-                $order->module = 'seurcashondelivery';
+                $order->payment = SeurLib::CODPaymentName;
+                $order->module = SeurLib::CODPaymentModule;
 
                 $shipping_amount_tax_incl = $order->total_shipping_tax_incl; //ya actualizados al nuevo carrier (seur)
                 $shipping_amount_tax_excl = $order->total_shipping_tax_excl; //ya actualizados al nuevo carrier (seur)
@@ -795,7 +772,9 @@ class AdminSeurShippingController extends ModuleAdminController
                 }
             }
             if ($result) {
-                $link->commit();
+                if ($link->inTransaction()) {
+                    $link->commit();
+                }
                 SeurLib::showMessageOK($this, 'Se ha cambiado el pedido para envío con Seur');
                 return true;
             }
@@ -804,7 +783,9 @@ class AdminSeurShippingController extends ModuleAdminController
             SeurLib::log('ADD SEUR ORDER '.$id_order.' - '.$e->getMessage());
         }
 
-        $link->rollback();
+        if ($link->inTransaction()) {
+            $link->rollback();
+        }
         SeurLib::showMessageError($this, 'No se ha podido cambiar el pedido para envío con Seur');
         return false;
     }
@@ -885,12 +866,11 @@ class AdminSeurShippingController extends ModuleAdminController
         return $order;
     }
 
-    private function getAllLabels($id_order)
+    private function getAllLabels($id_seur_order)
     {
-        $seur_order = new SeurOrder($id_order);
         $label_files_result = [];
-        if ($this->createLabel($seur_order->id)) {
-            $label_files = SeurOrder::getLabelFile($id_order); //Ahora puede ser array
+        if ($this->createLabel($id_seur_order)) {
+            $label_files = SeurOrder::getLabelFile($id_seur_order); //Ahora puede ser array
             $extension = '.pdf';
             $aux = explode($extension.'-', $label_files.'-');
 
@@ -907,17 +887,20 @@ class AdminSeurShippingController extends ModuleAdminController
         return [];
     }
 
-    private function printLabel($id_order)
+    private function printLabel($id_seur_order)
     {
-        $label_files = $this->getAllLabels($id_order);
+        $label_files = $this->getAllLabels($id_seur_order);
         $this->printAllLabels($label_files);
     }
 
     private function printAllLabels($label_files, $massive=false)
-    {   $fp = '';
+    {
+        if (empty($label_files)) {
+            SeurLib::showMessageError($this, 'No labels to print');
+            return false;
+        }
+        $fp = '';
         $type = '';
-        $label_file = '';
-
         $pdf = new PDFMerger;
         $directory = _PS_MODULE_DIR_ . 'seur/files/deliveries_labels/';
         foreach ($label_files as $label_file) {
@@ -952,8 +935,8 @@ class AdminSeurShippingController extends ModuleAdminController
         return false;
     }
 
-    private function generateManifest($id_orders){
-        $manifest = SeurManifest::createManifest($id_orders);
+    private function generateManifest($id_seur_orders){
+        SeurManifest::createManifest($id_seur_orders);
     }
 
     private function send_dd($id_seur_order){

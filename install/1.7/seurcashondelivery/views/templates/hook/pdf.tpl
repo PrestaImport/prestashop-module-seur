@@ -26,20 +26,25 @@
 
 <table style="width: 330px;">
         <tr>
-            <td style="width: 27px;"></td>
             <td style="background-color: #4d4d4d; color: #ffffff"><strong>{l s='Concept' mod='seurcashondelivery'}</strong></td>
-            <td style="background-color: #4d4d4d; color: #ffffff"></td>
+            {if $reembolso_show_detailed_taxes}
+            <td style="background-color: #4d4d4d; color: #ffffff"><strong>{l s='Tax' mod='seurcashondelivery'}</strong></td>
+            <td style="background-color: #4d4d4d; color: #ffffff"><strong>{l s='Tax amount' mod='seurcashondelivery'}</strong></td>
+            <td style="background-color: #4d4d4d; color: #ffffff"><strong>{l s='Base Price' mod='seurcashondelivery'}</strong></td>
+            {/if}
             <td style="background-color: #4d4d4d; color: #ffffff"><strong>{l s='Quantity' mod='seurcashondelivery'}</strong></td>
         </tr>
         <tr>
-            <td style="width: 27px;"></td>
             <td style="background-color: #dddddd;">{l s='Cash on delivery by SEUR' mod='seurcashondelivery'}</td>
-            <td style="background-color: #dddddd;"></td>
-            <td style="background-color: #dddddd;">{$reembolso_cargo|escape:'htmlall':'UTF-8'}<sup>*</sup></td>
+            {if $reembolso_show_detailed_taxes}
+                <td style="background-color: #dddddd;">{$reembolso_rate|escape:'htmlall':'UTF-8'}%</td>
+                <td style="background-color: #dddddd;">{$reembolso_cargo_tax}</td>
+                <td style="background-color: #dddddd;">{$reembolso_cargo_tax_excl}</td>
+            {/if}
+            <td style="background-color: #dddddd;">{$reembolso_cargo}<sup>*</sup></td>
         </tr>
         <br />
         <tr>
-            <td style="width: 27px;height: 35px;margin-top: 5px;"></td>
-            <td colspan="3"><p style="font-size:10px;margin:0;padding:0;"><sup>*</sup> {l s='This fee is included in delivery price.' mod='seurcashondelivery'}</p><br /></td>
+            <td colspan="{if $reembolso_show_detailed_taxes}5{else}2{/if}"><p style="font-size:10px;margin:0;padding:0;"><sup>*</sup> {l s='This fee is included in delivery price.' mod='seurcashondelivery'}</p><br /></td>
         </tr>
 </table>

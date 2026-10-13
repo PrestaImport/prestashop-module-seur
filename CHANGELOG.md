@@ -1,6 +1,83 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [2.5.26] - 2025-12-16
+### Added
+- Add config option to recalculate shipment cost in order capture
+
+## [2.5.25] - 2025-11-17
+### Added
+- Massive assign carrier to orders without carrier
+- Automatic update shipments (SEUR cron)
+- Add SEUR Returns site link
+- Pick-up locations search
+- Add PudoId input at edit order
+
+## [2.5.24] - 2025-10-22
+### Added
+- PS9 compatibility
+
+## Changed
+- Config options cleanup 
+
+## [2.5.23] - 2025-09-23
+### Added
+- Get new token only when expirated
+- Add carrier extra content
+- Add previous checkout submit validation for shipping method
+
+## Changed
+- Update shipments refactor
+- Remove unused getExpedition calls
+
+## Fixed
+- Fix label comments special chars
+- Fix COD display price at pdf 
+
+## [2.5.22] - 2025-08-18
+### Added
+- Add service S24
+- Add detailed COD taxes configuration to display in the order invoice 
+
+## [2.5.21] - 2025-07-22
+### Fixed
+- Installation error (Attempted to call an undefined method named "getIdByName")
+- Pick-up points map not loaded for certain themes and one page checkout modules
+
+## [2.5.20] - 2025-05-05
+### Fixed
+- Undefined google variable and delivery address previous check
+
+## [2.5.19] - 2025-03-31
+
+### Added
+- Add attemps to update shipments status
+
+### Changed
+- Refactor Seur GMap
+- Improve update shipment data
+
+## [2.5.18] - 2025-02-27
+
+### Added
+- Add Update shipment feature
+- Add packages feature
+
+### Fixed
+- Fix isPickupFrio
+- Fix seur_url_basepath not initialized in one case
+
+## [2.5.17] - 2025-02-03
+
+### Added
+- Add log info to UpdateShipmentStatus cron task
+- Add another class selector to initSeurCarriers (pickup)
+- Add all Seur COD manual payments if defined
+
+### Fixed 
+- Fix split error (pickup)
+- Fix seurcashondelivery module value and seur_url_basepath value
+
 ## [2.5.16] - 2024-12-12
 
 ### Fixed
